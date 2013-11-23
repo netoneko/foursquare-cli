@@ -40,24 +40,24 @@
     (println url)
     (json/read-str (slurp url))))
 
+(defn print-venue [venue]
+  (let [name (venue "name")
+        hours (venue "hours")
+        location (venue "location")]
+    (str "*****" \newline name
+      (if (and (not (nil? hours)) (hours "isOpen")) " (open)" " (closed)") \newline
+      (location "address") ", " (location "city"))))
+
 (defn print-venue-group [group]
   (str (group "type") \newline
-    (reduce (fn [buffer venue]
-              (let [name (venue "name")
-                    hours (venue "hours")
-                    location (venue "location")]
-                (str buffer \newline "*****" \newline name
-                  (if (and (not (nil? hours)) (hours "isOpen")) " (open)" " (closed)") \newline
-                  (location "address") ", " (location "city"))))
-      "" (map #(%1 "venue") (group "items")))))
+    (join \newline (map #(print-venue (%1 "venue")) (group "items")))))
 
 (def commands
   {"get" cmd-get
    "locate" cmd-locate
    "trends" (fn [args] (let [results (cmd-foursquare "trending" args)]
-                         (println ((results "response") "venues"))
                          (join \newline
-                           (map print-venue-group ((results "response") "venues")))))
+                           (map print-venue ((results "response") "venues")))))
    "explore" (fn [args] (let [results (cmd-foursquare "explore" args)]
                           (join \newline
                             (map print-venue-group ((results "response") "groups")))))
