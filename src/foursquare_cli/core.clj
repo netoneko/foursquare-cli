@@ -23,17 +23,45 @@
   (slurp (last args)))
 
 (defn cmd-locate [& args]
-  (json/read-str (slurp "http://www.telize.com/geoip")))
+  (let [location (json/read-str (slurp "http://www.telize.com/geoip"))]
+    [(location "latitude") (location "longitude")]))
 
-(defn cmd-trends [args]
-  (let [location (cmd-locate)
-        limit (or (last args) 3)
-        ll (join "," [(location "latitude") (location "longitude")])
-        url (query-foursquare "venues/explore" {"limit" limit, "ll" ll})]
+(defn cmd-locate-osm [args]
+  (let [name (java.net.URLEncoder/encode (join " " args))
+        url (str "http://nominatim.openstreetmap.org/search.php?format=json&q=" name)
+        location (first (json/read-str (slurp url)))]
+    (println url)
+    [(location "lat") (location "lon")]))
+
+(defn cmd-foursquare [command args]
+  (let [location (if (zero? (count args)) (cmd-locate) (cmd-locate-osm args))
+        options {"limit" 10, "radius" 1000, "ll" (join "," location)}
+        url (query-foursquare (str "venues/" command) options)]
+    (println url)
     (json/read-str (slurp url))))
 
+(defn print-venue-group [group]
+  (str (group "type") \newline
+    (reduce (fn [buffer venue]
+              (let [name (venue "name")
+                    hours (venue "hours")
+                    location (venue "location")]
+                (str buffer \newline "*****" \newline name
+                  (if (and (not (nil? hours)) (hours "isOpen")) " (open)" " (closed)") \newline
+                  (location "address") ", " (location "city"))))
+      "" (map #(%1 "venue") (group "items")))))
+
 (def commands
-  {"get" cmd-get, "locate" cmd-locate, "trends" cmd-trends})
+  {"get" cmd-get
+   "locate" cmd-locate
+   "trends" (fn [args] (let [results (cmd-foursquare "trending" args)]
+                         (println ((results "response") "venues"))
+                         (join \newline
+                           (map print-venue-group ((results "response") "venues")))))
+   "explore" (fn [args] (let [results (cmd-foursquare "explore" args)]
+                          (join \newline
+                            (map print-venue-group ((results "response") "groups")))))
+   })
 
 (defn do-command [command args]
   (println
